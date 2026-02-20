@@ -906,7 +906,6 @@ class PromptService(BaseService):
                     "import_batch_id": import_batch_id,
                     "federation_source": federation_source,
                 },
-                db=db,
             )
 
             # Structured logging: Log successful prompt creation
@@ -1339,7 +1338,6 @@ class PromptService(BaseService):
                             "federation_source": federation_source,
                             "conflict_strategy": conflict_strategy,
                         },
-                        db=db,
                     )
 
                 logger.info("Bulk registered %s prompts, updated %s prompts in chunk", len(prompts_to_add), len(prompts_to_update))
@@ -2432,7 +2430,6 @@ class PromptService(BaseService):
                 user_agent=modified_user_agent,
                 new_values={"name": prompt.name, "version": prompt.version},
                 context={"modified_via": modified_via},
-                db=db,
             )
 
             structured_logger.log(
@@ -2657,7 +2654,6 @@ class PromptService(BaseService):
                     team_id=prompt.team_id,
                     new_values={"enabled": prompt.enabled},
                     context={"action": "activate" if activate else "deactivate"},
-                    db=db,
                 )
 
                 structured_logger.log(
@@ -2777,7 +2773,6 @@ class PromptService(BaseService):
             resource_name=prompt.name,
             team_id=prompt.team_id,
             context={"include_inactive": include_inactive},
-            db=db,
         )
 
         structured_logger.log(
@@ -2869,7 +2864,6 @@ class PromptService(BaseService):
                 user_email=user_email,
                 team_id=prompt_team_id,
                 old_values={"name": prompt_name},
-                db=db,
             )
 
             # Structured logging: Log successful prompt deletion
