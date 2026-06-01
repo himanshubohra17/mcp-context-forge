@@ -144,6 +144,24 @@ This OAuth flow is **separate** from user authentication to ContextForge itself:
 
 For user authentication details, see [RBAC Configuration](../manage/rbac.md).
 
+### Session Affinity with OAuth
+
+When `MCPGATEWAY_SESSION_AFFINITY_ENABLED=true`, session-bound MCP POSTs are
+routed to the internal `/rpc` endpoint for optimal worker locality.
+
+The `/rpc` endpoint authenticates via `verify_jwt_token()`, which only accepts
+internal ContextForge JWTs. OAuth tokens issued by an external IdP fail
+signature verification there. To bridge this gap, the streamable HTTP transport
+layer automatically exchanges an external IdP OAuth token for a short-lived
+(1-minute) internal JWT before forwarding the request to `/rpc`. This exchange
+is transparent to clients.
+
+!!! note "Security: is_admin is not included in the exchanged JWT"
+    The minted internal JWT intentionally omits `is_admin` from its claims.
+    The `/rpc` endpoint determines admin status by querying the database, not
+    from JWT claims. This prevents JWT-based privilege escalation if token
+    verification were ever bypassed.
+
 ## Future Enhancements
 
 -   Wire UI toggles for token storage and auto-refresh to backend logic.
