@@ -1123,7 +1123,7 @@ class ToolCreate(BaseModel):
 
         Business rules:
         - If deprecated=True, sunsetDate is required and must be in the future
-        - If deprecated=False, sunsetDate should be cleared (set to None)
+        - If deprecated=False, sunsetDate must be None (active tools cannot have sunset dates)
         - Existing tools with deprecated=True but no sunsetDate are allowed (backwards compatibility)
 
         Returns:
@@ -1148,6 +1148,9 @@ class ToolCreate(BaseModel):
 
             if sunset_date <= now:
                 raise ValueError(f"sunsetDate must be in the future. Provided: {sunset_date.isoformat()}, Current time: {now.isoformat()}")
+        elif self.deprecated is False:
+            # Active tools cannot have sunset dates
+            self.sunset_date = None
 
         return self
 
@@ -1433,7 +1436,7 @@ class ToolUpdate(BaseModelWithConfigDict):
 
         Business rules for updates:
         - If deprecated is being set to True, sunsetDate must be provided and be in the future
-        - If deprecated is being set to False, sunsetDate should be cleared
+        - If deprecated is being set to False, sunsetDate must be None (active tools cannot have sunset dates)
         - If deprecated is not being changed, sunsetDate validation is skipped (partial update)
 
         Returns:
@@ -1460,6 +1463,10 @@ class ToolUpdate(BaseModelWithConfigDict):
 
                 if sunset_date <= now:
                     raise ValueError(f"sunsetDate must be in the future. Provided: {sunset_date.isoformat()}, Current time: {now.isoformat()}")
+            else:
+                # deprecated is being set to False, so clear sunset_date
+                # Active tools cannot have sunset dates
+                self.sunset_date = None
 
         return self
 
