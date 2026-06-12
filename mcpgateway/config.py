@@ -2740,9 +2740,7 @@ class Settings(BaseSettings):
     # Experimental dataplane config
     # ===================================
 
-    dataplane_publisher: bool = Field(default=False,
-        description="Send data from CF to Rust experimental dataplane"
-    )
+    dataplane_publisher: bool = Field(default=False, description="Send data from CF to Rust experimental dataplane")
 
     # Well-Known URI Configuration
     # ===================================
@@ -3310,7 +3308,7 @@ Disallow: /
         default=False,
         description="Enable passthrough of sensitive headers (Authorization, X-API-Key, etc.) when explicitly whitelisted. "
         "Requires enable_header_passthrough=true. Default: false for security. "
-        "When enabled, whitelisted sensitive headers bypass router-level filtering."
+        "When enabled, whitelisted sensitive headers bypass router-level filtering.",
     )
 
     # Passthrough headers configuration
