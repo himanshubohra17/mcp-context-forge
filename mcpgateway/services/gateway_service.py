@@ -2441,6 +2441,24 @@ class GatewayService(BaseService):  # pylint: disable=too-many-instance-attribut
                 prompts_to_add = []
                 reinit_succeeded = False
 
+                # Connection-affecting fields already written to `gateway` above; compare
+                # against the pre-update snapshot to decide whether a failed re-init must
+                # block the commit (vs. a cosmetic update tolerating an unreachable upstream).
+                init_affecting_changed = any(
+                    new != old
+                    for new, old in (
+                        (gateway.url, original_url),
+                        (gateway.transport, original_transport),
+                        (gateway.auth_type, original_auth_type),
+                        (gateway.auth_value, original_auth_value),
+                        (gateway.auth_query_params, original_auth_query_params),
+                        (gateway.oauth_config, original_oauth_config),
+                        (gateway.ca_certificate, original_ca_certificate),
+                        (getattr(gateway, "client_cert", None), original_client_cert),
+                        (getattr(gateway, "client_key", None), original_client_key),
+                    )
+                )
+
                 try:
                     ca_certificate = getattr(gateway, "ca_certificate", None)
                     update_client_cert = getattr(gateway, "client_cert", None)
@@ -2452,17 +2470,26 @@ class GatewayService(BaseService):  # pylint: disable=too-many-instance-attribut
                             update_client_key = _enc.decrypt_secret_or_plaintext(update_client_key)
                         except Exception:
                             logger.debug("client_key decryption skipped during gateway re-init")
-                    capabilities, tools, resources, prompts, _ = await self._initialize_gateway(
-                        init_url,
-                        gateway.auth_value,
-                        gateway.transport,
-                        gateway.auth_type,
-                        gateway.oauth_config,
-                        ca_certificate,
-                        auth_query_params=auth_query_params_decrypted,
-                        client_cert=update_client_cert,
-                        client_key=update_client_key,
-                    )
+                    try:
+                        capabilities, tools, resources, prompts, _ = await self._initialize_gateway(
+                            init_url,
+                            gateway.auth_value,
+                            gateway.transport,
+                            gateway.auth_type,
+                            gateway.oauth_config,
+                            ca_certificate,
+                            auth_query_params=auth_query_params_decrypted,
+                            client_cert=update_client_cert,
+                            client_key=update_client_key,
+                        )
+                    except Exception as init_err:
+                        # New URL/auth/TLS config is unreachable or invalid. Wrap non-connection
+                        # errors so the outer handler can recognize this as a connection failure
+                        # and decide (via init_affecting_changed) whether to propagate as a 502
+                        # or swallow as a best-effort cosmetic update (see visibility note ~2256).
+                        if init_affecting_changed and not isinstance(init_err, GatewayConnectionError):
+                            raise GatewayConnectionError(f"Failed to initialize gateway at {gateway.url}: {init_err}") from init_err
+                        raise
                     new_tool_names = [tool.name for tool in tools]
                     new_resource_uris = [resource.uri for resource in resources]
                     new_prompt_names = [prompt.name for prompt in prompts]
@@ -2580,6 +2607,14 @@ class GatewayService(BaseService):  # pylint: disable=too-many-instance-attribut
                     self._active_gateways.discard(gateway.url)
                     self._active_gateways.add(gateway.url)
                     reinit_succeeded = True
+                except GatewayConnectionError as gce:
+                    if init_affecting_changed:
+                        # Do NOT persist the broken update — propagate so the outer handler
+                        # rolls back (nothing committed) and the API returns 502, matching
+                        # POST /gateways behavior.
+                        raise
+                    logger.warning(f"Failed to initialize updated gateway: {gce}")
+                    reinit_succeeded = False
                 except Exception as e:
                     logger.warning("Failed to initialize updated gateway: %s", e)
                     reinit_succeeded = False
@@ -2736,6 +2771,10 @@ class GatewayService(BaseService):  # pylint: disable=too-many-instance-attribut
                 error=gnfe,
             )
             raise gnfe
+        except GatewayConnectionError as gce:
+            logger.error(f"GatewayConnectionError during gateway update: {gce}")
+            db.rollback()
+            raise gce
         except IntegrityError as ie:
             logger.error("IntegrityErrors in group: %s", ie)
             db.rollback()
